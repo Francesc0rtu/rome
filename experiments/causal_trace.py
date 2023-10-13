@@ -24,6 +24,7 @@ from util.runningstats import Covariance, tally
 
 
 def main():
+    print("start")
     parser = argparse.ArgumentParser(description="Causal Tracing")
 
     def aa(*args, **kwargs):
@@ -39,7 +40,7 @@ def main():
 
     aa(
         "--model_name",
-        default="gpt2-xl",
+        default="gpt2",
         choices=[
             "gpt2-xl",
             "EleutherAI/gpt-j-6B",
@@ -67,13 +68,13 @@ def main():
     torch_dtype = torch.float16 if "20b" in args.model_name else None
 
     mt = ModelAndTokenizer(args.model_name, torch_dtype=torch_dtype)
-
+    print("Model loaded")
     if args.fact_file is None:
         knowns = KnownsDataset(DATA_DIR)
     else:
         with open(args.fact_file) as f:
             knowns = json.load(f)
-
+    print("Knowns loaded")
     noise_level = args.noise_level
     uniform_noise = False
     if isinstance(noise_level, str):
@@ -95,7 +96,7 @@ def main():
         elif noise_level.startswith("u"):
             uniform_noise = True
             noise_level = float(noise_level[1:])
-
+    print("Start tracing")
     for knowledge in tqdm(knowns):
         known_id = knowledge["known_id"]
         for kind in None, "mlp", "attn":
@@ -466,7 +467,7 @@ class ModelAndTokenizer:
                 model_name, low_cpu_mem_usage=low_cpu_mem_usage, torch_dtype=torch_dtype
             )
             nethook.set_requires_grad(False, model)
-            model.eval().cuda()
+            model.eval()
         self.tokenizer = tokenizer
         self.model = model
         self.layer_names = [
@@ -544,43 +545,43 @@ def plot_trace_heatmap(result, savepdf=None, title=None, xlabel=None, modelname=
     for i in range(*result["subject_range"]):
         labels[i] = labels[i] + "*"
 
-    with plt.rc_context(rc={"font.family": "Times New Roman"}):
-        fig, ax = plt.subplots(figsize=(3.5, 2), dpi=200)
-        h = ax.pcolor(
-            differences,
-            cmap={None: "Purples", "None": "Purples", "mlp": "Greens", "attn": "Reds"}[
-                kind
-            ],
-            vmin=low_score,
-        )
-        ax.invert_yaxis()
-        ax.set_yticks([0.5 + i for i in range(len(differences))])
-        ax.set_xticks([0.5 + i for i in range(0, differences.shape[1] - 6, 5)])
-        ax.set_xticklabels(list(range(0, differences.shape[1] - 6, 5)))
-        ax.set_yticklabels(labels)
-        if not modelname:
-            modelname = "GPT"
-        if not kind:
-            ax.set_title("Impact of restoring state after corrupted input")
-            ax.set_xlabel(f"single restored layer within {modelname}")
-        else:
-            kindname = "MLP" if kind == "mlp" else "Attn"
-            ax.set_title(f"Impact of restoring {kindname} after corrupted input")
-            ax.set_xlabel(f"center of interval of {window} restored {kindname} layers")
-        cb = plt.colorbar(h)
-        if title is not None:
-            ax.set_title(title)
-        if xlabel is not None:
-            ax.set_xlabel(xlabel)
-        elif answer is not None:
-            # The following should be cb.ax.set_xlabel, but this is broken in matplotlib 3.5.1.
-            cb.ax.set_title(f"p({str(answer).strip()})", y=-0.16, fontsize=10)
-        if savepdf:
-            os.makedirs(os.path.dirname(savepdf), exist_ok=True)
-            plt.savefig(savepdf, bbox_inches="tight")
-            plt.close()
-        else:
-            plt.show()
+  
+    fig, ax = plt.subplots(figsize=(3.5, 2), dpi=200)
+    h = ax.pcolor(
+        differences,
+        cmap={None: "Purples", "None": "Purples", "mlp": "Greens", "attn": "Reds"}[
+            kind
+        ],
+        vmin=low_score,
+    )
+    ax.invert_yaxis()
+    ax.set_yticks([0.5 + i for i in range(len(differences))])
+    ax.set_xticks([0.5 + i for i in range(0, differences.shape[1] - 6, 5)])
+    ax.set_xticklabels(list(range(0, differences.shape[1] - 6, 5)))
+    ax.set_yticklabels(labels)
+    if not modelname:
+        modelname = "GPT"
+    if not kind:
+        ax.set_title("Impact of restoring state after corrupted input")
+        ax.set_xlabel(f"single restored layer within {modelname}")
+    else:
+        kindname = "MLP" if kind == "mlp" else "Attn"
+        ax.set_title(f"Impact of restoring {kindname} after corrupted input")
+        ax.set_xlabel(f"center of interval of {window} restored {kindname} layers")
+    cb = plt.colorbar(h)
+    if title is not None:
+        ax.set_title(title)
+    if xlabel is not None:
+        ax.set_xlabel(xlabel)
+    elif answer is not None:
+        # The following should be cb.ax.set_xlabel, but this is broken in matplotlib 3.5.1.
+        cb.ax.set_title(f"p({str(answer).strip()})", y=-0.16, fontsize=10)
+    if savepdf:
+        os.makedirs(os.path.dirname(savepdf), exist_ok=True)
+        plt.savefig(savepdf, bbox_inches="tight")
+        plt.close()
+    else:
+        plt.show()
 
 
 def plot_all_flow(mt, prompt, subject=None):
@@ -589,7 +590,7 @@ def plot_all_flow(mt, prompt, subject=None):
 
 
 # Utilities for dealing with tokens
-def make_inputs(tokenizer, prompts, device="cuda"):
+def make_inputs(tokenizer, prompts, device="cpu"):
     token_lists = [tokenizer.encode(p) for p in prompts]
     maxlen = max(len(t) for t in token_lists)
     if "[PAD]" in tokenizer.all_special_tokens:

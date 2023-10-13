@@ -20,7 +20,7 @@ class KnownsDataset(Dataset):
             torch.hub.download_url_to_file(REMOTE_URL, known_loc)
 
         with open(known_loc, "r") as f:
-            self.data = json.load(f)
+            self.data = json.load(f)[:10]
 
         print(f"Loaded dataset with {len(self)} elements")
 
